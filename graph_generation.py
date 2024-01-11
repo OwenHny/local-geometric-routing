@@ -1,7 +1,7 @@
 import random
 import math
+import csv
 
-graph_adjacency_map = {}
 
 #add_vertex(graph_adjacency_map, 1, [0, 2])
 def add_vertex(graph, vertex, neighbor):
@@ -51,7 +51,7 @@ def generate_random_points(num_points, x_range, y_range):
 
 
 #distance_threshold = 10.0
-def process_points_within_distance(points, distance_threshold):
+def process_points_within_distance(graph, points, distance_threshold):
     """
     Loop through the list of points and call a function for pairs that are within a given distance.
 
@@ -70,19 +70,66 @@ def process_points_within_distance(points, distance_threshold):
             point2 = points[j]
             distance = math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
             if distance <= distance_threshold:
-                add_vertex(graph_adjacency_map, i, j)
+                add_vertex(graph, i, j)
+
+
+def remove_unconnected_nodes(graph):
+    """
+    Remove nodes that are not connected to any other nodes in the graph.
+
+    Parameters:
+    - graph: Dictionary representing the graph
+
+    Returns:
+    - Updated graph with unconnected nodes removed
+    """
+    updated_graph = dict()
+    visited = set()
+    start = 0
+    while len(graph[start]) == 0 and start < len(graph.keys()) - 1:
+        start += 1
+    traverse(graph, start, visited)
+
+    for node in visited:
+        updated_graph[node] = graph[node]
+
+    return updated_graph
+
+def traverse(graph, node, visited):
+    visited.add(node)
+
+    for neighbor in graph[node]:
+        if neighbor not in visited:
+            traverse(graph, neighbor, visited)
 
 
 def main():
-    num_points = 10
-    for i in range(num_points):
-        graph_adjacency_map[i] = []
+    generate_graphs = 10
+    graphs = 0
+    with open("graphs.csv", mode='w', newline='') as file:
+        writer = csv.writer(file)
 
-    points = generate_random_points(num_points, (0,50), (0,50))
-    process_points_within_distance(points, 15)
+        while graphs < generate_graphs: 
+            graph = {}
+            num_points = 10
+            min_points = .5
 
-    print(points)
-    print(graph_adjacency_map)
+            graph = {key: [] for key in range(num_points)}
 
+            points = generate_random_points(num_points, (0,50), (0,50))
+            process_points_within_distance(graph,points, 10)
+
+            valid_graph = remove_unconnected_nodes(graph)
+            
+            num_keys = len(valid_graph.keys())
+            if num_keys >= num_points * min_points:
+                graphs += 1
+            
+                start = random.randrange(num_keys)
+                end = start
+                while end == start: 
+                    end = random.randrange(num_keys)
+
+                writer.writerow([valid_graph, list(valid_graph.keys())[start], list(valid_graph.keys())[end], points ])
 
 main()
