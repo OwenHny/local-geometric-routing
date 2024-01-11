@@ -14,3 +14,12 @@ class Test(unittest.TestCase):
         self.assertEqual(graph_adjacency_map,  {0: [1, 2], 1: [0, 3], 2: [0, 3], 3: [1, 2]})
         print(graph_adjacency_map)
 
+    def test_distance(self):
+        self.assertTrue(False)
+
+    def test_connected(self):
+        self.assertTrue(False)
+
+    def test_dijkstra(self):
+        self.assertTrue(False)
+

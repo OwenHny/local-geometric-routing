@@ -1,7 +1,7 @@
 import random
 import math
 import csv
-
+import heapq
 
 #add_vertex(graph_adjacency_map, 1, [0, 2])
 def add_vertex(graph, vertex, neighbor):
@@ -102,17 +102,38 @@ def traverse(graph, node, visited):
         if neighbor not in visited:
             traverse(graph, neighbor, visited)
 
+def dijkstra(graph, start, end):
+    visited = set()
+    distances = {node: float('infinity') for node in graph}
+    distances[start] = 0
+    priority_queue = [(0, start)]
+
+    while priority_queue:
+        current_distance, current_node = heapq.heappop(priority_queue)
+
+        if current_node not in visited:
+            visited.add(current_node)
+        
+            for neighbor in graph[current_node]:
+                distance = current_distance + 1
+
+                if distance < distances[neighbor]:
+                    distances[neighbor] = distance
+                    heapq.heappush(priority_queue, (distance, neighbor))
+
+    return distances[end]
 
 def main():
     generate_graphs = 10
     graphs = 0
     with open("graphs.csv", mode='w', newline='') as file:
         writer = csv.writer(file)
+        writer.writerow(["graph", "start", "end", "points"])
 
         while graphs < generate_graphs: 
             graph = {}
             num_points = 10
-            min_points = .5
+            min_points = .8
 
             graph = {key: [] for key in range(num_points)}
 
@@ -122,14 +143,21 @@ def main():
             valid_graph = remove_unconnected_nodes(graph)
             
             num_keys = len(valid_graph.keys())
-            if num_keys >= num_points * min_points:
-                graphs += 1
+            if num_keys >= num_points * min_points: # filter on large enough graph
             
                 start = random.randrange(num_keys)
                 end = start
                 while end == start: 
                     end = random.randrange(num_keys)
 
-                writer.writerow([valid_graph, list(valid_graph.keys())[start], list(valid_graph.keys())[end], points ])
+                start_node = list(valid_graph.keys())[start] 
+                end_node = list(valid_graph.keys())[end] 
+                
+                distance = dijkstra(valid_graph,start_node, end_node) 
+
+                if distance > 1:
+                #print(valid_graph, list(valid_graph.keys())[start], list(valid_graph.keys())[end],distance )
+                    graphs += 1
+                    writer.writerow([valid_graph,start_node, end_node, points, distance]) 
 
 main()
