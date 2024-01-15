@@ -1,2 +1,4 @@
 
 __pycache__/graph_generation.cpython-38.pyc
+.vscode/c_cpp_properties.json
+*.exe
