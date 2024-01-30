@@ -4,7 +4,7 @@ import csv
 import heapq
 
 #add_vertex(graph_adjacency_map, 1, [0, 2])
-def add_vertex(graph, vertex, neighbor):
+def add_edge(graph, vertex, neighbor):
     """
     Add a new vertex to the graph adjacency map.
 
@@ -26,6 +26,10 @@ def add_vertex(graph, vertex, neighbor):
         graph[neighbor] = [vertex]
 
 
+def remove_edge(graph, point1, point2):
+    graph[point1].remove(point2)
+    graph[point2].remove(point1)
+
 # Example usage:
 #num_points = 10
 #x_range = (0, 100)
@@ -46,7 +50,7 @@ def generate_random_points(num_points, x_range, y_range):
     for _ in range(num_points):
         x = random.uniform(x_range[0], x_range[1])
         y = random.uniform(y_range[0], y_range[1])
-        random_points.append((x, y))
+        random_points.append((round(x), round(y)))
     return random_points
 
 
@@ -70,8 +74,8 @@ def process_points_within_distance(graph, points, distance_threshold):
             point2 = points[j]
             distance = math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
             if distance <= distance_threshold:
-                add_vertex(graph, i, j)
-
+                #print( point1, point2)
+                add_edge(graph, point1, point2)
 
 def remove_unconnected_nodes(graph):
     """
@@ -85,10 +89,13 @@ def remove_unconnected_nodes(graph):
     """
     updated_graph = dict()
     visited = set()
-    start = 0
-    while len(graph[start]) == 0 and start < len(graph.keys()) - 1:
-        start += 1
-    traverse(graph, start, visited)
+    start = None
+    for key in graph:
+        if len(graph[key]) > 0:
+            start = key
+            break
+    if start:
+        traverse(graph, start, visited)
 
     for node in visited:
         updated_graph[node] = graph[node]
@@ -121,43 +128,74 @@ def dijkstra(graph, start, end):
                     distances[neighbor] = distance
                     heapq.heappush(priority_queue, (distance, neighbor))
 
+    #print(distances)
     return distances[end]
+
+def remove_points(num_points, keys, points):
+    correction = 0
+    for key in range(num_points):
+        if key not in keys:
+            del points[key - correction]
+            correction += 1
+    
+def planar(graph):
+    #print(graph)
+    removed = False
+    for node in graph:
+        for neighbor in graph[node]:
+            cx = (neighbor[0] - node[0])/2 + node[0]
+            cy = (neighbor[1] - node[1])/2 + node[1]
+            r = math.sqrt(pow(node[0] - cx, 2) + pow(node[1] - cy, 2)) 
+            for point in graph[node]:
+                   if neighbor != point and math.sqrt(pow(point[0] - cx,2) + pow(point[1] - cy, 2)) < r:
+                       remove_edge(graph, node, neighbor)         
+                       removed = True
+                       #print(node, neighbor, point, cx, cy, r)
+                       break
+            if removed:
+                break
+
 
 def main():
     generate_graphs = 10
     graphs = 0
     with open("graphs.csv", mode='w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(["graph", "start", "end", "points"])
-
+        writer.writerow(["num_nodes","graph", "start", "end", "points", "path_length"])
+        
+        num_points = 10
+        min_points = .8 # % of points that must remain for valid graph
         while graphs < generate_graphs: 
             graph = {}
-            num_points = 10
-            min_points = .8
+            
+            graph #= {key: [] for key in range(num_points)}
 
-            graph = {key: [] for key in range(num_points)}
-
-            points = generate_random_points(num_points, (0,50), (0,50))
+            points = generate_random_points(num_points, (0,40), (0,40))
             process_points_within_distance(graph,points, 10)
 
             valid_graph = remove_unconnected_nodes(graph)
-            
+
             num_keys = len(valid_graph.keys())
             if num_keys >= num_points * min_points: # filter on large enough graph
-            
+                remove_points(num_points, valid_graph.keys(), points)
+                #valid_graph = reindexgraph(valid_graph)
+
+                planar(valid_graph)                
+                
                 start = random.randrange(num_keys)
                 end = start
                 while end == start: 
                     end = random.randrange(num_keys)
 
                 start_node = list(valid_graph.keys())[start] 
-                end_node = list(valid_graph.keys())[end] 
-                
+                end_node = list(valid_graph.keys())[end]
+
                 distance = dijkstra(valid_graph,start_node, end_node) 
 
                 if distance > 1:
                 #print(valid_graph, list(valid_graph.keys())[start], list(valid_graph.keys())[end],distance )
                     graphs += 1
-                    writer.writerow([valid_graph,start_node, end_node, points, distance]) 
+                    num_points += 4
+                    writer.writerow([num_keys, valid_graph,start_node, end_node, distance]) 
 
 main()
