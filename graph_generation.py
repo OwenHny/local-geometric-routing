@@ -13,17 +13,18 @@ def add_edge(graph, vertex, neighbor):
     - vertex: The new vertex to be added.
     - neighbor : The new  neighbor for the vertex.
     """
-    if vertex in graph:
-        if neighbor not in graph.get(vertex, []):
-            graph[vertex].append(neighbor)    
-    else:
-        graph[vertex] = [neighbor]        
+    if vertex != neighbor: # don't allow duplicate points
+        if vertex in graph:
+            if neighbor not in graph.get(vertex, []):
+                graph[vertex].append(neighbor)    
+        else:
+            graph[vertex] = [neighbor]        
 
-    if neighbor in graph:
-        if vertex not in graph.get(neighbor, []):
-            graph[neighbor].append(vertex)
-    else:
-        graph[neighbor] = [vertex]
+        if neighbor in graph:
+            if vertex not in graph.get(neighbor, []):
+                graph[neighbor].append(vertex)
+        else:
+            graph[neighbor] = [vertex]
 
 
 def remove_edge(graph, point1, point2):
@@ -145,9 +146,9 @@ def planar(graph):
         for neighbor in graph[node]:
             cx = (neighbor[0] - node[0])/2 + node[0]
             cy = (neighbor[1] - node[1])/2 + node[1]
-            r = math.sqrt(pow(node[0] - cx, 2) + pow(node[1] - cy, 2)) 
+            r = distance_calc(node, (cx, cy))
             for point in graph[node]:
-                   if neighbor != point and math.sqrt(pow(point[0] - cx,2) + pow(point[1] - cy, 2)) < r:
+                   if neighbor != point and distance_calc(point, (cx,cy))< r:
                        remove_edge(graph, node, neighbor)         
                        removed = True
                        #print(node, neighbor, point, cx, cy, r)
@@ -155,13 +156,93 @@ def planar(graph):
             if removed:
                 break
 
+def distance_calc(point1, point2):
+    return (math.sqrt(pow(point1[0] - point2[0], 2) + pow(point1[1] - point2[1], 2))) 
+
+def calc_angle(center, point1, point2):
+    line1 = (center[0] - point1[0], center[1]- point1[1])
+    line2 = (point2[0] - center[0], point2[1] - center[1])
+
+    dot = line1[0] * line2[0] + line1[1] * line2[1]
+    line1_len = math.sqrt(line1[0] * line1[0] + line1[1] * line1[1])
+    line2_len = math.sqrt(line2[0] * line2[0] + line2[1] * line2[1])
+
+    #print(center, point1, point2, line1, line2, dot, line1_len, line2_len)
+    
+    return math.acos(min(max(dot/(line1_len * line2_len), -1), 1))
+
+def greedy_stuck(start, end, graph):
+    node = start
+
+    while node != end:
+        next_node = node
+        distance = distance_calc(node, end) 
+        for neighbor in graph[node]: 
+            if distance_calc(neighbor, end)< distance:
+                next_node = neighbor
+                distance = distance_calc(neighbor, end) 
+        if next_node == node:          
+            print(node, end, graph[node])
+            return node
+        node = next_node
+
+    return None
+
+def compass_stuck(start, end, graph):
+    node = start
+
+    while node != end:
+        next_node = node
+        min_angle = math.pi/2
+        for neighbor in graph[node]:
+            if neighbor == end:
+                return None
+            #print(node, neighbor, end, graph[node]) 
+            angle = calc_angle(node,end, neighbor)
+            if min_angle > angle: 
+                min_angle = angle
+                next_node = neighbor
+
+        if next_node == node:
+            #print(node, end, graph[node])
+            return node
+        node = next_node
+
+    return None 
+
+def greedy_compass_stuck(start, end, graph):
+    node = start
+
+    while node != end:
+        next_node1 = node
+        next_node2 = node
+        min_angle1 = math.pi/2
+        min_angle2 = math.pi/2
+        for neighbor in graph[node]:
+            if neighbor == end:
+               return None 
+            angle = calc_angle(node, end, neighbor)
+            if angle < min_angle1 or angle < min_angle2:
+                if min_angle1 < min_angle2:
+                   min_angle2 = angle
+                   next_node2 = neighbor
+                else:
+                   min_angle1 = angle
+                   next_node1 = neighbor 
+        if next_node1 == node and next_node2 == node:
+            print(node, end, graph[node])
+            return node
+        
+        node = next_node1 if min_angle1 < min_angle2 else next_node2
+
+    return None
 
 def main():
     generate_graphs = 10
     graphs = 0
     with open("graphs.csv", mode='w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(["num_nodes","graph", "start", "end", "points", "path_length"])
+        writer.writerow(["num_nodes","graph", "start", "end", "path_length", "stuck"])
         
         num_points = 10
         min_points = .8 # % of points that must remain for valid graph
@@ -189,13 +270,19 @@ def main():
 
                 start_node = list(valid_graph.keys())[start] 
                 end_node = list(valid_graph.keys())[end]
+                
+                #stuck = greedy_stuck(start_node, end_node, graph)
+                #stuck = compass_stuck(start_node, end_node, graph)
+                stuck = greedy_compass_stuck(start_node, end_node, graph)
 
                 distance = dijkstra(valid_graph,start_node, end_node) 
 
-                if distance > 1:
+
+                if distance > 1 and stuck:
                 #print(valid_graph, list(valid_graph.keys())[start], list(valid_graph.keys())[end],distance )
                     graphs += 1
-                    num_points += 4
-                    writer.writerow([num_keys, valid_graph,start_node, end_node, distance]) 
+                    writer.writerow([num_keys, valid_graph,start_node, end_node, distance, stuck]) 
 
+
+#print(calc_angle((0,0),(1,0), (0,1)))
 main()
