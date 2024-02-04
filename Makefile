@@ -1,7 +1,7 @@
 CXX := g++
-CXXFLAGS := -std=c++11 -Wall
+CXXFLAGS := -std=c++11 -Wall -lpthread
 
-SRC := controller.cpp
+SRC := controller.cpp node.cpp
 TARGET := controller
 
 all: $(TARGET)
