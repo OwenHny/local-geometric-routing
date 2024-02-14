@@ -2,6 +2,7 @@ import random
 import math
 import csv
 import heapq
+import routing
 
 #add_vertex(graph_adjacency_map, 1, [0, 2])
 def add_edge(graph, vertex, neighbor):
@@ -75,7 +76,7 @@ def process_points_within_distance(graph, points, distance_threshold):
             point2 = points[j]
             distance = math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
             if distance <= distance_threshold:
-                #print( point1, point2)
+               # print( point1, point2)
                 add_edge(graph, point1, point2)
 
 def remove_unconnected_nodes(graph):
@@ -167,9 +168,10 @@ def calc_angle(center, point1, point2):
     line1_len = math.sqrt(line1[0] * line1[0] + line1[1] * line1[1])
     line2_len = math.sqrt(line2[0] * line2[0] + line2[1] * line2[1])
 
-    #print(center, point1, point2, line1, line2, dot, line1_len, line2_len)
-    
-    return math.acos(min(max(dot/(line1_len * line2_len), -1), 1))
+    angle = min(max(dot/(line1_len * line2_len), -1), 1)
+    sign = -1 if angle < 0 else 1
+
+    return sign * math.acos(angle )
 
 def greedy_stuck(start, end, graph):
     node = start
@@ -182,7 +184,7 @@ def greedy_stuck(start, end, graph):
                 next_node = neighbor
                 distance = distance_calc(neighbor, end) 
         if next_node == node:          
-            print(node, end, graph[node])
+            #print(node, end, graph[node])
             return node
         node = next_node
 
@@ -198,7 +200,7 @@ def compass_stuck(start, end, graph):
             if neighbor == end:
                 return None
             #print(node, neighbor, end, graph[node]) 
-            angle = calc_angle(node,end, neighbor)
+            angle = abs(calc_angle(node,end, neighbor))
             if min_angle > angle: 
                 min_angle = angle
                 next_node = neighbor
@@ -213,45 +215,47 @@ def compass_stuck(start, end, graph):
 def greedy_compass_stuck(start, end, graph):
     node = start
 
-    while node != end:
-        next_node1 = node
-        next_node2 = node
-        min_angle1 = math.pi/2
-        min_angle2 = math.pi/2
+    while node != end: 
+        right_node = node
+        left_node = node
+        right_angle = math.pi/2
+        left_angle = -1 * math.pi/2
         for neighbor in graph[node]:
             if neighbor == end:
                return None 
             angle = calc_angle(node, end, neighbor)
-            if angle < min_angle1 or angle < min_angle2:
-                if min_angle1 < min_angle2:
-                   min_angle2 = angle
-                   next_node2 = neighbor
-                else:
-                   min_angle1 = angle
-                   next_node1 = neighbor 
-        if next_node1 == node and next_node2 == node:
+            if angle < right_angle:
+                right_node = neighbor
+                right_angle = angle
+            elif angle > left_angle:
+                left_node = neighbor
+                left_angle = angle
+        if right_node == node and left_node == node:
             print(node, end, graph[node])
             return node
         
-        node = next_node1 if min_angle1 < min_angle2 else next_node2
+        node = right_node if distance_calc(right_node, end) < distance_calc(left_node, end) else left_node 
 
     return None
 
 def main():
-    generate_graphs = 10
+    generate_graphs = 100
     graphs = 0
+
+    not_stuck = 0
+
     with open("graphs.csv", mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(["num_nodes","graph", "start", "end", "path_length", "stuck"])
         
-        num_points = 10
-        min_points = .8 # % of points that must remain for valid graph
+        num_points = 100
+        min_points = .5 # % of points that must remain for valid graph
         while graphs < generate_graphs: 
             graph = {}
             
             graph #= {key: [] for key in range(num_points)}
 
-            points = generate_random_points(num_points, (0,40), (0,40))
+            points = generate_random_points(num_points, (0,100), (0,100))
             process_points_within_distance(graph,points, 10)
 
             valid_graph = remove_unconnected_nodes(graph)
@@ -270,10 +274,11 @@ def main():
 
                 start_node = list(valid_graph.keys())[start] 
                 end_node = list(valid_graph.keys())[end]
-                
+
+                stuck = True 
                 #stuck = greedy_stuck(start_node, end_node, graph)
                 #stuck = compass_stuck(start_node, end_node, graph)
-                stuck = greedy_compass_stuck(start_node, end_node, graph)
+                #stuck = greedy_compass_stuck(start_node, end_node, graph)
 
                 distance = dijkstra(valid_graph,start_node, end_node) 
 
@@ -281,8 +286,14 @@ def main():
                 if distance > 1 and stuck:
                 #print(valid_graph, list(valid_graph.keys())[start], list(valid_graph.keys())[end],distance )
                     graphs += 1
+                    #num_points += 1
+                    #routing.one_bit(start_node, end_node, graph)
+                    print(num_keys)
                     writer.writerow([num_keys, valid_graph,start_node, end_node, distance, stuck]) 
+                elif not stuck:
+                    not_stuck +=1
+    
+    print(not_stuck)
 
 
-#print(calc_angle((0,0),(1,0), (0,1)))
 main()
