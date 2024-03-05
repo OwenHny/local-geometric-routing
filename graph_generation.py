@@ -2,7 +2,10 @@ import random
 import math
 import csv
 import heapq
-import routing
+import copy
+
+base_options = ["greedy", "compass", "greedy_compass"]
+base = base_options[0]
 
 #add_vertex(graph_adjacency_map, 1, [0, 2])
 def add_edge(graph, vertex, neighbor):
@@ -16,21 +19,23 @@ def add_edge(graph, vertex, neighbor):
     """
     if vertex != neighbor: # don't allow duplicate points
         if vertex in graph:
-            if neighbor not in graph.get(vertex, []):
+            if neighbor not in graph[vertex]:#graph.get(vertex, []):
                 graph[vertex].append(neighbor)    
         else:
             graph[vertex] = [neighbor]        
 
         if neighbor in graph:
-            if vertex not in graph.get(neighbor, []):
+            if vertex not in graph[neighbor]:#graph.get(neighbor, []):
                 graph[neighbor].append(vertex)
         else:
             graph[neighbor] = [vertex]
 
 
 def remove_edge(graph, point1, point2):
-    graph[point1].remove(point2)
-    graph[point2].remove(point1)
+    if point2 in graph[point1]:
+        graph[point1].remove(point2)
+    if point1 in graph[point2]:
+        graph[point2].remove(point1)
 
 # Example usage:
 #num_points = 10
@@ -130,7 +135,6 @@ def dijkstra(graph, start, end):
                     distances[neighbor] = distance
                     heapq.heappush(priority_queue, (distance, neighbor))
 
-    #print(distances)
     return distances[end]
 
 def remove_points(num_points, keys, points):
@@ -141,37 +145,31 @@ def remove_points(num_points, keys, points):
             correction += 1
     
 def planar(graph):
-    #print(graph)
-    removed = False
-    for node in graph:
-        for neighbor in graph[node]:
+    planar = copy.deepcopy(graph) 
+    for node in graph: # loop for each node in graph
+        for neighbor in graph[node]: # loop through all neighbors of a node
             cx = (neighbor[0] - node[0])/2 + node[0]
             cy = (neighbor[1] - node[1])/2 + node[1]
             r = distance_calc(node, (cx, cy))
-            for point in graph[node]:
-                   if neighbor != point and distance_calc(point, (cx,cy))< r:
-                       remove_edge(graph, node, neighbor)         
-                       removed = True
-                       #print(node, neighbor, point, cx, cy, r)
+            for point in graph[node]: # check if any other neighbors of the node are in the collision range, if so remove the edge
+                   if neighbor != point and distance_calc(point, (cx,cy)) < r:
+                       remove_edge(planar, node, neighbor)         
                        break
-            if removed:
-                break
+    return planar
+
+def count_neighbors(graph):
+    count = 0
+    for node in graph:
+        count += len(graph[node])
+
+    return count
 
 def distance_calc(point1, point2):
     return (math.sqrt(pow(point1[0] - point2[0], 2) + pow(point1[1] - point2[1], 2))) 
 
 def calc_angle(center, point1, point2):
-    line1 = (center[0] - point1[0], center[1]- point1[1])
-    line2 = (point2[0] - center[0], point2[1] - center[1])
+    return math.atan2(point2[1] - center[1], point2[0] - center[0]) - math.atan2(point1[1] - center[1], point1[0] - center[0])
 
-    dot = line1[0] * line2[0] + line1[1] * line2[1]
-    line1_len = math.sqrt(line1[0] * line1[0] + line1[1] * line1[1])
-    line2_len = math.sqrt(line2[0] * line2[0] + line2[1] * line2[1])
-
-    angle = min(max(dot/(line1_len * line2_len), -1), 1)
-    sign = -1 if angle < 0 else 1
-
-    return sign * math.acos(angle )
 
 def greedy_stuck(start, end, graph):
     node = start
@@ -190,8 +188,9 @@ def greedy_stuck(start, end, graph):
 
     return None
 
-def compass_stuck(start, end, graph):
+def compass_stuck(start, end, graph, num_nodes):
     node = start
+    steps = 0
 
     while node != end:
         next_node = node
@@ -199,16 +198,17 @@ def compass_stuck(start, end, graph):
         for neighbor in graph[node]:
             if neighbor == end:
                 return None
-            #print(node, neighbor, end, graph[node]) 
             angle = abs(calc_angle(node,end, neighbor))
-            if min_angle > angle: 
+            if angle > math.pi:
+                angle = (math.pi*2  - angle) 
+            if min_angle >= angle: 
                 min_angle = angle
                 next_node = neighbor
 
-        if next_node == node:
-            #print(node, end, graph[node])
+        if next_node == node or steps > num_nodes *2:
             return node
         node = next_node
+        steps += 1
 
     return None 
 
@@ -223,77 +223,98 @@ def greedy_compass_stuck(start, end, graph):
         for neighbor in graph[node]:
             if neighbor == end:
                return None 
-            angle = calc_angle(node, end, neighbor)
-            if angle < right_angle:
+            angle = abs(calc_angle(node, end, neighbor))
+
+            if angle > math.pi:
+                angle = (math.pi*2  - angle) * - 1             
+#            print(angle, neighbor)
+            if angle <= right_angle and angle >= 0:
                 right_node = neighbor
                 right_angle = angle
-            elif angle > left_angle:
+            elif angle >= left_angle and angle < 0:
                 left_node = neighbor
                 left_angle = angle
-        if right_node == node and left_node == node:
-            print(node, end, graph[node])
-            return node
-        
-        node = right_node if distance_calc(right_node, end) < distance_calc(left_node, end) else left_node 
 
+        if right_node == node and left_node == node:            
+#            print(node, end, graph)
+            return node
+        elif right_node == node:
+            next = left_node
+        elif left_node == node:
+            next = right_node
+        else:
+            next = right_node if distance_calc(right_node, end) < distance_calc(left_node, end) else left_node 
+
+        if distance_calc(next, end) < distance_calc(node, end):
+            node = next
+        else:
+#            print(node, end, graph)
+            return node
     return None
 
 def main():
-    generate_graphs = 100
-    graphs = 0
+    for base in base_options:
+        print(base)
+        generate_graphs = 5000
+        graphs = 0
 
-    not_stuck = 0
+        failed_graph = 0
+        not_stuck = 0 
+        frame_size = 100
 
-    with open("graphs.csv", mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(["num_nodes","graph", "start", "end", "path_length", "stuck"])
-        
-        num_points = 100
+        num_points = 150
         min_points = .5 # % of points that must remain for valid graph
-        while graphs < generate_graphs: 
-            graph = {}
+
+        with open(base + "_graphs.csv", mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(["num_nodes","graph", "planar", "start", "end", "path_length", "stuck", "average_neighbors"])
             
-            graph #= {key: [] for key in range(num_points)}
-
-            points = generate_random_points(num_points, (0,100), (0,100))
-            process_points_within_distance(graph,points, 10)
-
-            valid_graph = remove_unconnected_nodes(graph)
-
-            num_keys = len(valid_graph.keys())
-            if num_keys >= num_points * min_points: # filter on large enough graph
-                remove_points(num_points, valid_graph.keys(), points)
-                #valid_graph = reindexgraph(valid_graph)
-
-                planar(valid_graph)                
+            while graphs < generate_graphs: 
+                graph = {}
                 
-                start = random.randrange(num_keys)
-                end = start
-                while end == start: 
-                    end = random.randrange(num_keys)
+                points = generate_random_points(num_points, (0,frame_size), (0,frame_size))
+                process_points_within_distance(graph,points, 10)
 
-                start_node = list(valid_graph.keys())[start] 
-                end_node = list(valid_graph.keys())[end]
+                valid_graph = remove_unconnected_nodes(graph)
 
-                stuck = True 
-                #stuck = greedy_stuck(start_node, end_node, graph)
-                #stuck = compass_stuck(start_node, end_node, graph)
-                #stuck = greedy_compass_stuck(start_node, end_node, graph)
+                num_keys = len(valid_graph.keys())
+                if num_keys >= num_points * min_points: # filter on large enough graph
+                    remove_points(num_points, valid_graph.keys(), points)
 
-                distance = dijkstra(valid_graph,start_node, end_node) 
+                    planar_graph = planar(valid_graph)
+                    
+                    start = random.randrange(num_keys)
+                    start_node = list(valid_graph.keys())[start] 
+                    end_node = start_node
+                    end = start
+                    distance = 0
+                    while end == start and distance < 2: 
+                        end = random.randrange(num_keys)
+                        end_node = list(valid_graph.keys())[end]
+                        distance = dijkstra(valid_graph,start_node, end_node) 
 
 
-                if distance > 1 and stuck:
-                #print(valid_graph, list(valid_graph.keys())[start], list(valid_graph.keys())[end],distance )
-                    graphs += 1
-                    #num_points += 1
-                    #routing.one_bit(start_node, end_node, graph)
-                    print(num_keys)
-                    writer.writerow([num_keys, valid_graph,start_node, end_node, distance, stuck]) 
-                elif not stuck:
-                    not_stuck +=1
+                    stuck = start_node
+                    if base == base_options[0]:
+                        stuck = greedy_stuck(start_node, end_node, graph)
+                    if base == base_options[1]:
+                        stuck = compass_stuck(start_node, end_node, graph, num_keys)
+                    if base == base_options[2]:
+                        stuck = greedy_compass_stuck(start_node, end_node, graph)
+
+                    if stuck:
+                        average_neighbors = count_neighbors(valid_graph) / num_keys
+                        graphs += 1
+                        #num_points += 1
+                        #frame_size = math.floor(graphs*.43 + 20) 
+                        print(graphs, failed_graph, not_stuck, num_points, frame_size, distance)
+                        writer.writerow([num_keys, valid_graph, planar_graph,start_node, end_node, distance, stuck, average_neighbors]) 
+                    else:
+                        not_stuck +=1
+                else:
+                    failed_graph += 1   
     
-    print(not_stuck)
 
 
-main()
+if __name__ == '__main__':
+    main()
