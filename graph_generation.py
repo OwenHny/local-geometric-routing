@@ -253,16 +253,19 @@ def greedy_compass_stuck(start, end, graph):
     return None
 
 def main():
-    for base in base_options:
-        print(base)
-        generate_graphs = 5000
+    #for base in base_options:
+    #    print(base)
+        base = ""
+        generate_graphs = 20000
         graphs = 0
 
         failed_graph = 0
         not_stuck = 0 
-        frame_size = 100
+        #frame_size = 20
+        frame_size = 75 
 
-        num_points = 150
+        #num_points = 10
+        num_points = 125
         min_points = .5 # % of points that must remain for valid graph
 
         with open(base + "_graphs.csv", mode='w', newline='') as file:
@@ -306,9 +309,11 @@ def main():
                         average_neighbors = count_neighbors(valid_graph) / num_keys
                         graphs += 1
                         #num_points += 1
-                        #frame_size = math.floor(graphs*.43 + 20) 
-                        print(graphs, failed_graph, not_stuck, num_points, frame_size, distance)
+                        #frame_size = math.floor(graphs*.37 + 20) 
+                        #print(graphs, failed_graph, not_stuck, num_points, num_keys, frame_size, distance)
                         writer.writerow([num_keys, valid_graph, planar_graph,start_node, end_node, distance, stuck, average_neighbors]) 
+                        if graphs % 100 == 0:
+                            print(graphs)
                     else:
                         not_stuck +=1
                 else:
