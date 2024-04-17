@@ -2,12 +2,14 @@ import pandas
 import math
 import ast
 import graph_print
+import random
 
 BUMPED_ZERO = 0.000001
-ROUTING_FAILURE = 1000
+ROUTING_FAILURE = 3000
 
 base_options = ["greedy", "compass", "greedy_compass", "aware_compass", "forward_compass"]
-recovery_options = ["face", "quick_face","left", "left_nonplanar", "void"]
+#recovery_options = ["face", "quick_face","left", "left_nonplanar", "void", "quick_void", "long_face", "random"]
+recovery_options = ["face", "quick_face","left", "left_nonplanar", "void", "quick_void", "long_face"]
 #recovery_options = ["face", "quick_face"]
 
 quick_exit = False
@@ -22,7 +24,7 @@ step_limit = 0
 limit_modifier = 2
 
 def import_graphs(filename):
-    global num_steps, recovery, base, step_limit
+    global num_steps, recovery, base, step_limit, quick_exit
     num_graphs = 0
 
     if loop_recovery:
@@ -32,7 +34,7 @@ def import_graphs(filename):
 
         result = {}
         for option in recovery_options:
-            result[option] = 0
+            result[option] = [[0,0],[0,0]]
 
         csvFile = pandas.read_csv(file)
         for case in csvFile.iterrows():
@@ -51,19 +53,25 @@ def import_graphs(filename):
                 recovery = option 
                 path(start, end, graph, planar)
                 stretch = num_steps / case[1].path_length
-                #if stretch < 3:
-                result[option] = result[option] + stretch 
-                #else:
-                    #result[option][1] = result[option][1] + stretch 
+                #if option == recovery_options[0]:
+                #    print(stretch)
+                if stretch < 2:
+                    result[option][0][0] = result[option][0][0] + stretch 
+                    result[option][0][1] += 1
+                else:
+                    result[option][1][0] = result[option][1][0] + stretch 
+                    result[option][1][1] += 1
                 num_steps = 0
             #print(result) 
-           #print(case[0])
+            #print(case[0])
 
         for option in recovery_options:
-            result[option] = result[option] / num_graphs
+            #result[option] = result[option] / num_graphs
+            result[option][0][0] = result[option][0][0] / result[option][0][1]
+            result[option][1][0] = result[option][1][0] / result[option][1][1]
             
         print(result)
-        print(result["face"]/result["quick_face"], result["face"]/result["void"])
+#        print(result["face"]/result["quick_face"], result["face"]/result["quick_void"])
 
 
 def path(start, end, graph, planar):
@@ -143,7 +151,8 @@ def crossing_point(point1, point2, Line, end):
 
 
 def greedy(start, end, graph, planar):
-    global num_steps
+    global num_steps, loop_recovery
+    loop_recovery = False
     node = start
 
     while node != end:
@@ -161,7 +170,8 @@ def greedy(start, end, graph, planar):
             num_steps = num_steps + 1 
 
 def compass(start, end, graph, planar):
-    global num_steps, step_limit
+    global num_steps, step_limit, loop_recovery
+    loop_recovery = True
     node = start
 
     while node != end:
@@ -191,7 +201,7 @@ def aware_compass(start, end, graph, planar):
     previous_nodes = {}
 
     while node != end:
-        if node in previous_nodes:
+        if node in previous_nodes: # check if this node has seen this message previously
             if previous_nodes[node] > limit_modifier:
                 node = unstuck(node, end, planar, graph)
             else:
@@ -218,7 +228,8 @@ def aware_compass(start, end, graph, planar):
             num_steps = num_steps + 1
 
 def forward_compass(start, end, graph, planar):
-    global num_steps, step_limit
+    global num_steps, step_limit, loop_recovery
+    loop_recovery = False
     node = start
 
     while node != end:
@@ -244,7 +255,8 @@ def forward_compass(start, end, graph, planar):
 
 
 def greedy_compass(start, end, graph, planar):
-    global num_steps 
+    global num_steps, loop_recovery
+    loop_recovery = False
     node = start
 
     while node != end:
@@ -291,11 +303,17 @@ def unstuck(node, end, planar, graph):
         next_node = left(node, end, planar)
     elif recovery == recovery_options[3] and not loop_recovery:
         next_node = left_nonplanar(node, end, graph)
-    elif recovery == recovery_options[4]: 
+    elif recovery == recovery_options[4] and not loop_recovery: 
         next_node = void(node, end, graph) 
+    elif recovery == recovery_options[5] and not loop_recovery:
+        next_node = quick_void(node, end, graph)
+    elif recovery == recovery_options[6] and not loop_recovery:
+        next_node = long_face(node, end, planar)
+    #elif recovery == recovery_options[7] and not loop_recovery:
+    #    next_node = random_recovery(node, end, graph)
     else:
         #print("No Unstuck specified")
-        next_node = face(node, end, planar)
+        next_node = end 
 
     return next_node    
 
@@ -306,13 +324,14 @@ def is_unstuck(node, stop, end):
     else:
         return distance_calc(node, end) < distance_calc(stop, end) 
 
+# Stop, last, 
 def left(node, end, graph):
-    global num_steps
+    global num_steps, quick_exit
     stop = node
-    next = node
     last = end
 
     while node != end and not is_unstuck(node, stop, end): 
+        next = node
         if num_steps > ROUTING_FAILURE:
             raise Exception("stop") 
 
@@ -344,19 +363,31 @@ def bump_point(point):
     return [point[0] + point[1]/1000 , point[1] + point[0]/1000]
 
 def face(node, end, graph):
-    global num_steps
+    global num_steps, quick_exit
     A = end[1] - node[1]
     B = node[0] - end[0]
     C = node[1]*(end[0] - node[0]) - node[0]*(end[1] - node[1])
 
+    path = []
+    path.append(end)
+
     stop = node
     last = end
-    next = node
     direction = 1 
-    best_crossing = distance_calc(node, end)
+    #best_crossing = None
+    best_crossing = distance_calc(node, end) #+ 1# + BUMPED_ZERO
+    full_loop = node
+    #best_crossing = distance_calc(bump_point(node), bump_point(end))
 
     while node != end and not is_unstuck(node, stop, end):
+        path.append(node)
+        #print(node, last, graph[node])
+        next = node
         if num_steps > ROUTING_FAILURE:
+            print(stop, end, graph)
+            print("face failure")
+            #graph_print.plot_graph((node, end, stop), graph)
+            graph_print.plot_graph(path, graph)
             raise Exception("stop")
         angle = math.pi * 3 
         if end in graph[node]:
@@ -366,6 +397,8 @@ def face(node, end, graph):
             if quick_exit and is_unstuck(neighbor, stop, end):
                 return neighbor
             test_angle = calc_angle(node, last, neighbor) * direction
+            #test_angle = calc_angle(bump_point(node), bump_point(last), bump_point(neighbor)) * direction
+            
             if test_angle == -0.0:
                 test_angle = 0 
             if test_angle == 0 or neighbor == last:
@@ -373,15 +406,45 @@ def face(node, end, graph):
             elif test_angle < 0 :
                 test_angle = math.pi * 2 - (test_angle * -1)
 
+            #print(node, neighbor, test_angle)
             if test_angle < angle: 
                 angle = test_angle 
                 next = neighbor
+            #elif test_angle + .05 > math.pi *2 and node == stop:
+            #    angle = math.pi * 2 - test_angle
+            #    next = neighbor 
+            #    direction = direction * -1
 
         crossing = crossing_point(bump_point(node), bump_point(next), (A,B,C), bump_point(end))
-        if crossing == best_crossing and last != end and last != next:
+        side = (A * node[0] + B * node[1] + C ) # ensures that the direction is not switched on entry and exit to a point on the line 
+        #crossing = crossing_point(node, next, (A,B,C), end)
+        #print(num_steps, last, node, next, best_crossing, crossing)
+        #if crossing == best_crossing and last != end and last != next and node != stop and side != 0:
+        #    print("direction")
+        if full_loop == node and last != end:
+            full_loop = None
+
+        if full_loop == None and (crossing == best_crossing and last != end and last != next) or best_crossing == distance_calc(stop, end) + 10 and next == stop: 
+            #best_crossing = distance_calc(stop, end)
+            if best_crossing == distance_calc(stop, end) + 10:
+                next = end
+            best_crossing = distance_calc(stop, end) #+ 1 
             direction = direction * -1
-        elif crossing != 0 and crossing < best_crossing and last != end: 
+            full_loop = node
+            #print("direction")
+        elif crossing != 0 and  crossing < best_crossing + BUMPED_ZERO and last != end: 
             best_crossing = crossing
+        elif next == stop and last != end and best_crossing == distance_calc(stop, end) and full_loop == None:#and last != stop:
+            #print("here")
+            #direction = direction * -1
+            best_crossing = distance_calc(stop, end) + 10
+        #elif node == stop and last != end:
+            #print("here")
+            #direction = direction * -1
+            #next = node
+            #node = end
+        #elif last == end and direction * (A* bump_point(next)[0] + B * bump_point(next)[1] + C) <= 0:
+            #direction = direction * -1
 
         num_steps += 1
         last = node
@@ -392,12 +455,12 @@ def face(node, end, graph):
     
 def left_nonplanar(node, end, graph):
     # left routing, doing planar calcs during forwarding descision
-    global num_steps
+    global num_steps, quick_exit
     stop = node
-    next = node
     last = end
 
     while node != end and not is_unstuck(node, stop, end): 
+        next = node
         if num_steps > ROUTING_FAILURE:
             print("Left non Planar failure")
             raise Exception("stop")
@@ -437,18 +500,18 @@ def left_nonplanar(node, end, graph):
 # face routing, change direction as soon as a crossing point is found
 # stop node, end point, last node, best crossing, and routing direction all passed with message
 def quick_face(node, end, graph):
-    global num_steps
+    global num_steps, quick_exit
     A = end[1] - node[1]
     B = node[0] - end[0]
     C = node[1]*(end[0] - node[0]) - node[0]*(end[1] - node[1])
 
     stop = node
     last = end
-    next = node
     direction = 1 
     best_crossing = distance_calc(node, end)
 
     while node != end and not is_unstuck(node, stop, end):
+        next = node
         if num_steps > ROUTING_FAILURE:
             print("Quick face failure")
             return end
@@ -489,19 +552,81 @@ def quick_face(node, end, graph):
         num_steps += 1
     return node
 
+def long_face(node, end, graph):
+    global num_steps, quick_exit
+    A = end[1] - node[1]
+    B = node[0] - end[0]
+    C = node[1]*(end[0] - node[0]) - node[0]*(end[1] - node[1])
+
+    last = end
+    direction = 1 
+    best_crossing = distance_calc(node, end)
+
+    while node != end: 
+        next = node
+        if num_steps > ROUTING_FAILURE:
+            raise Exception("stop")
+        angle = math.pi * 3 
+        if end in graph[node]:
+            return end
+
+        for neighbor in graph[node]:
+            test_angle = calc_angle(node, last, neighbor) * direction
+            if test_angle == -0.0:
+                test_angle = 0 
+            if test_angle == 0 or neighbor == last:
+                test_angle = math.pi * 2
+            elif test_angle < 0 :
+                test_angle = math.pi * 2 - (test_angle * -1)
+
+            if test_angle < angle: 
+                angle = test_angle 
+                next = neighbor
+
+        crossing = crossing_point(bump_point(node), bump_point(next), (A,B,C), bump_point(end))
+        if crossing == best_crossing and last != end and last != next:
+            direction = direction * -1
+        elif crossing != 0 and crossing < best_crossing and last != end: 
+            best_crossing = crossing
+
+        num_steps += 1
+        last = node
+        node = next
+        next = None
+
+    return node
+
+
+def random_recovery(node, end, graph):
+    global num_steps 
+    
+    counter = 0
+    while counter < len(graph)/2:
+        if end in graph[node]:
+            num_steps += 1
+            return end
+        next = random.randint(0, len(graph[node]) - 1)
+        node = graph[node][next]
+        counter += 1
+        num_steps +=1
+    
+    return node
+  
+
 def cross_product(p1,p2,p3):
     return (p2[0] - p1[0]) * (p3[1] - p2[1]) - (p2[1] - p1[1]) * (p3[0] - p2[0])
 
 # traverse void of non planar graph
 def void(node, end, graph):
-    global num_steps
+    global num_steps, quick_exit
     stop = node
     last = end
     next = None
     last_intersection = None
     direction = 1
     best_crossing = distance_calc(node, end)
-    path = []
+
+    path = [] # for testing, and visualization
     path.append(end)
     
     A = end[1] - node[1]
@@ -509,12 +634,14 @@ def void(node, end, graph):
     C = node[1]*(end[0] - node[0]) - node[0]*(end[1] - node[1])
 
     while node != end and not is_unstuck(node, stop, end):
-        path.append(node)
         if num_steps > ROUTING_FAILURE:
             print("void failure")
-            print((stop,node, end), graph)
-            graph_print.plot_graph(path, graph)
-            raise Exception("stop")
+            #print(path, graph)
+            #graph_print.plot_graph(path, graph)
+            #raise Exception("stop")
+            return end
+        #print(num_steps, node, last)
+        path.append(node)
  
         if end in graph[node]:
             return end
@@ -546,8 +673,11 @@ def void(node, end, graph):
 
                             cos_angle = (vec1[0] * vec2[0] + vec1[1] * vec2[1]) / math.sqrt((vec1[0]**2 + vec1[1]**2) * (vec2[0]**2 + vec2[1]**2))
                            
-                            if ((test_angle > 0  and test_angle < math.pi) or test_angle < math.pi * -1) and cos_angle < 0.97: 
+                            #if ((test_angle > 0  and test_angle < math.pi) or test_angle < math.pi * -1) and cos_angle < 0.97 and (test_angle > math.pi/4 or cos_angle < .8): 
+                            if ((test_angle > 0  and test_angle < math.pi) or test_angle < math.pi * -1) and (test_angle > math.pi/4 or cos_angle < .5): 
+                                #print("intersect", neighbor, two_hop, cos_angle, test_angle)
 
+                                #print(test_angle > math.pi/4, cos_angle < .8)
                                 if face_intersection and crossing > face_intersection - BUMPED_ZERO: # check that bumped equvilant crossing is going more left than current option
                                     vec3 = (set_next[0] - next[0], set_next[1] - next[1] )
                                     cos_angle2 = (vec1[0] * vec3[0] + vec1[1] * vec3[1]) / math.sqrt((vec1[0]**2 + vec1[1]**2) * (vec3[0]**2 + vec3[1]**2))
@@ -604,35 +734,167 @@ def void(node, end, graph):
         num_steps += 1
     return node
 
+def quick_void(node, end, graph):
+    global num_steps, quick_exit
+    stop = node
+    last = end
+    next = None
+    last_intersection = None
+    direction = 1
+    best_crossing = distance_calc(node, end)
+    
+    A = end[1] - node[1]
+    B = node[0] - end[0]
+    C = node[1]*(end[0] - node[0]) - node[0]*(end[1] - node[1])
+
+    while node != end and not is_unstuck(node, stop, end):
+        if num_steps > ROUTING_FAILURE:
+            print("quick void failure")
+            #print((stop,node, end), graph)
+            return end
+ 
+        if end in graph[node]:
+            return end
+
+        if next == None:
+            angle = math.pi * 3
+            set_next = None
+            face_intersection = None
+            
+            # check if previous edge is intersected by any two hop neighor edge
+            # else normal face routing:    
+            for neighbor in graph[node]:
+                if quick_exit and is_unstuck(neighbor, stop, end): # quick exit
+                    return neighbor
+
+                for two_hop in graph[neighbor]:
+                    if two_hop != node  and two_hop != last and neighbor != last and  last != end:
+                        crossing = crossing_points(bump_point(neighbor), bump_point(two_hop), bump_point(node), bump_point(last)) 
+
+                        if (crossing > BUMPED_ZERO and crossing < distance_calc(bump_point(node), bump_point(last)) - BUMPED_ZERO and 
+                            (face_intersection == None or (crossing < face_intersection - BUMPED_ZERO) or 
+                             (crossing <= face_intersection + BUMPED_ZERO and distance_calc(next, two_hop) < distance_calc(next, set_next)))  and
+                            (last_intersection == None or crossing > last_intersection + BUMPED_ZERO )):
+
+                            test_angle = calc_intersect_angle(node, last, neighbor, two_hop) * direction
+
+                            vec1 = (last[0] - node[0], last[1] -node[1] )
+                            vec2 = (two_hop[0] - neighbor[0], two_hop[1] - neighbor[1] )
+
+                            cos_angle = (vec1[0] * vec2[0] + vec1[1] * vec2[1]) / math.sqrt((vec1[0]**2 + vec1[1]**2) * (vec2[0]**2 + vec2[1]**2))
+                           
+                            #if ((test_angle > 0  and test_angle < math.pi) or test_angle < math.pi * -1) and cos_angle < 0.97: 
+                            if ((test_angle > 0  and test_angle < math.pi) or test_angle < math.pi * -1) and (test_angle > math.pi/4 or cos_angle < .5): 
+
+                                if face_intersection and crossing > face_intersection - BUMPED_ZERO: # check that bumped equvilant crossing is going more left than current option
+                                    vec3 = (set_next[0] - next[0], set_next[1] - next[1] )
+                                    cos_angle2 = (vec1[0] * vec3[0] + vec1[1] * vec3[1]) / math.sqrt((vec1[0]**2 + vec1[1]**2) * (vec3[0]**2 + vec3[1]**2))
+                                    if cos_angle2 < cos_angle + .1: 
+                                        face_intersection = crossing
+                                        next =  neighbor
+                                        set_next = two_hop 
+                                else:
+                                    face_intersection = crossing
+                                    next =  neighbor
+                                    set_next = two_hop 
+
+                if face_intersection == None:
+                    test_angle = calc_angle(node, last, neighbor) * direction
+                    if test_angle == -0.0:
+                        test_angle = 0 
+                    if test_angle == 0 or neighbor == last or test_angle > 0 - BUMPED_ZERO and test_angle < BUMPED_ZERO:
+                        test_angle = math.pi * 2
+                    elif test_angle < 0 :
+                        test_angle = math.pi * 2 + test_angle 
+
+                    if test_angle < angle: 
+                        angle = test_angle 
+                        next = neighbor
+                    if test_angle == angle and distance_calc(node, neighbor) < distance_calc(node, next):
+                        next = neighbor
+
+            side = (A * node[0] + B * node[1] + C ) # ensures that the direction is not switched on entry and exit to a point on the line 
+            if face_intersection != None:
+                crossing = crossing_point(bump_point(node), bump_point(set_next), (A,B,C), bump_point(end))
+                
+                last_intersection= crossing_points(bump_point(node), bump_point(last), bump_point(set_next), bump_point(next))
+                if set_next in graph[node]:
+                    last = next
+                    node = set_next
+                    next = None
+                else:
+                    last = node
+                    node = next
+                    next = set_next 
+                
+            else:
+                crossing = crossing_point(bump_point(node), bump_point(next), (A,B,C), bump_point(end))
+
+                last = node
+                node = next
+                next = None
+                last_intersection = None
+            
+            # check if the next node is on the other side of the line from the current node 
+            if crossing == best_crossing and last != end and side != 0 and last != next:
+                direction = direction * -1
+            elif crossing and crossing < best_crossing and last != end and side != 0:  
+                best_crossing = crossing
+        else:
+            last = node
+            node = next
+            next = None
+        num_steps += 1
+    return node
 
 if __name__ == '__main__': 
     
-    base = base_options[0]
-    import_graphs("100s v2/greedy_graphs.csv")
-    import_graphs("basic/greedy_graphs.csv")
+    #base = base_options[3]
+    #loop_recovery = True
+    #import_graphs("dense_graphs.csv")
+    #import_graphs("sparse_graphs.csv")
+    #loop_recovery = False
     quick_exit = True
-    import_graphs("basic/greedy_graphs.csv")
-    import_graphs("100s v2/greedy_graphs.csv")
-    base = base_options[2]
+    #base = base_options[0]
+    #import_graphs("dense_graphs.csv")
+    #import_graphs("basic/greedy_graphs.csv")
+    #import_graphs("sparse_graphs.csv")
+    #base = base_options[2]
+    #import_graphs("dense_graphs.csv")
+    #import_graphs("sparse_graphs.csv")
+    #import_graphs("100s v2/greedy_compass_graphs.csv")
+    #import_graphs("basic/greedy_compass_graphs.csv")
+    #import_graphs("basic/greedy_compass_graphs.csv")
+    #import_graphs("100s v2/greedy_compass_graphs.csv")
+
+    #base = base_options[2]
     #import_graphs("100s v2/greedy_compass_graphs.csv")
     #loop_recovery = True
     #base = base_options[3]
     #import_graphs("100s v2/compass_graphs.csv")
 
-    # loop_recovery = True
-    # base = base_options[1]
-    # limit_modifier = .25
-    # import_graphs("_graphs.csv")
-    # 
-    # base = base_options[3]
-    # limit_modifier = 1
-    # import_graphs("_graphs.csv")
+    #loop_recovery = True
+    #base = base_options[3]
+    #import_graphs("basic/greedy_graphs.csv")
+    #import_graphs("dense_graphs.csv")
+    #import_graphs("sparse_graphs.csv")
+ 
+    #base = base_options[1]
+    #limit_modifier = .5
+    #import_graphs("dense_graphs.csv")
+    #import_graphs("sparse_graphs.csv")
     
-    #limit_modifier = .05
-    #import_graphs("_graphs.csv")
+    #limit_modifier = .25
+    #import_graphs("dense_graphs.csv")
+    #import_graphs("sparse_graphs.csv")
+    
+    #limit_modifier = .1
+    #import_graphs("dense_graphs.csv")
+    #import_graphs("sparse_graphs.csv")
 
-    #limit_modifier = .025
-    #import_graphs("_graphs.csv")
+    #limit_modifier = .05
+    #import_graphs("dense_graphs.csv")
+    #import_graphs("sparse_graphs.csv")
     #base = base_options[3]
     #limit_modifier = 2
     #import_graphs("basic/compass_graphs.csv")
@@ -643,8 +905,21 @@ if __name__ == '__main__':
     
 
     base = base_options[0]
-    import_graphs("100s/" + base + "_graphs.csv")
-    import_graphs("100s v2/" +base + "_graphs.csv")
-    #base = base_options[2]
-#    import_graphs("100s/" + base + "_graphs.csv")
+    import_graphs("basic/" +base + "_graphs.csv")
+    #import_graphs("100s/" + base + "_graphs.csv")
+    #import_graphs("100s v2/" +base + "_graphs.csv")
+    #import_graphs("high density/" +base + "_graphs.csv")
+    #import_graphs("lower density/" +base + "_graphs.csv")
+
+
+    base = base_options[2]
+    #import_graphs("basic/" +base + "_graphs.csv")
+    #import_graphs("100s/" + base + "_graphs.csv")
+    #import_graphs("100s v2/" +base + "_graphs.csv")
+    #import_graphs("high density/" +base + "_graphs.csv")
+    #import_graphs("lower density/" +base + "_graphs.csv")
+    
+    #base = base_options[4]
+    #import_graphs("dense_graphs.csv")
+    #import_graphs("sparse_graphs.csv")
     

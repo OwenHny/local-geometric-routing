@@ -155,7 +155,16 @@ def planar(graph):
                    if neighbor != point and distance_calc(point, (cx,cy)) < r:
                        remove_edge(planar, node, neighbor)         
                        break
+    for node in graph:
+        if len(planar[node]) == 0:
+            closest = graph[node][0]
+            for neighbor in graph[node]:
+                if distance_calc(node, neighbor)< distance_calc(node, closest):
+                    closest = neighbor
+
+        add_edge(planar, node, closest)
     return planar
+
 
 def count_neighbors(graph):
     count = 0
@@ -262,10 +271,10 @@ def main():
         failed_graph = 0
         not_stuck = 0 
         #frame_size = 20
-        frame_size = 75 
+        frame_size = 100 
 
         #num_points = 10
-        num_points = 125
+        num_points = 250
         min_points = .5 # % of points that must remain for valid graph
 
         with open(base + "_graphs.csv", mode='w', newline='') as file:

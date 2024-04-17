@@ -7,6 +7,7 @@ Read papers on geometric routing and falmilarized myself with the algorithms
 # Block 2 (Jan 22 - Feb 3)
 
 Implemented one bit routing
+Implementation of graph generation
 
 # Block 3 (Feb 5 - 16)
 
@@ -34,4 +35,17 @@ Tested all routing implementations
 Ran more routing performance tests
 Started compiling notes and writing the paper
 
-# Block 6 (Mar 25 - April 12)
+# Block 6 (Mar 25 - April 5)
+
+Continuing tests, and visualizing results
+Writing Paper
+
+Creating presentaion 
+
+# Block 7 (April 8 - April 19)
+
+Finishing and giving presentation
+Writing paper
+Finalizing results
+
+Finishing paper
